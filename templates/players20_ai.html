@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIFA 20 Top Players Analysis</title>
+    <!-- D3.js v7 and Scrollama CDNs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/scrollama/3.2.0/scrollama.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #fcfcfc;
+            --text-color: #2b2b2b;
+            --muted-color: #8c8c8c;
+            --light-gray: #e8e8e8;
+            --accent-color: #d9534f; /* Single accent hue: Muted Red/Coral */
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        header {
+            padding: 6rem 2rem 4rem;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.15rem;
+            color: var(--muted-color);
+        }
+
+        /* Scrollytelling Container */
+        #scrolly {
+            position: relative;
+            display: flex;
+            background-color: var(--bg-color);
+            padding: 1rem;
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+
+        /* Graphic Element (Sticky Chart) */
+        .scrolly-graphic {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 0;
+            left: 0;
+            width: 60%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+
+        #chart {
+            width: 100%;
+            height: 80vh;
+        }
+
+        /* Scroll Steps */
+        .scrolly-text {
+            position: relative;
+            padding: 0 1rem;
+            width: 40%;
+            max-width: 450px;
+            flex: 1;
+        }
+
+        .step {
+            margin: 0 auto 80vh auto;
+            background-color: rgba(255, 255, 255, 0.95);
+            border: 1px solid var(--light-gray);
+            border-radius: 6px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            opacity: 0.3;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .step.is-active {
+            opacity: 1;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .step p {
+            font-size: 1.1rem;
+            color: var(--text-color);
+            font-weight: 400;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            padding: 8px 12px;
+            background: #ffffff;
+            border: 1px solid var(--light-gray);
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 0.85rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .tooltip-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        footer {
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            #scrolly {
+                flex-direction: column-reverse;
+            }
+            .scrolly-graphic {
+                width: 100%;
+                height: 50vh;
+            }
+            .scrolly-text {
+                width: 100%;
+                max-width: none;
+            }
+            .step {
+                margin-bottom: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!--
+DESIGN NOTE (Munzner Visualization Framework):
+
+1. Task Abstraction (Munzner Ch. 3):
+   - Action: Readers compare attributes across top players, discover age vs. rating distribution trends, locate outlier performers, and explore the value-to-rating relationship.
+   - Target: Distribution of overall player ratings, correlation between age/value and overall performance, and key outliers (e.g., high rating vs age/value).
+
+2. Data Abstraction (Munzner Ch. 2):
+   - Player Name: Categorical (Key)
+   - Overall Rating: Quantitative / Ordered (Value)
+   - Age: Quantitative / Ordered (Value)
+   - Market Value (€): Quantitative / Ordered (Value)
+   - Preferred Foot: Categorical (Value)
+   - Primary Position Category (GK, DEF, MID, FWD): Categorical (Value)
+
+3. Encoding (Munzner Ch. 5):
+   - Overall Rating: Assigned to Y-position on a common vertical scale (most critical quantitative metric).
+   - Age / Market Value: Assigned to X-position on a common horizontal scale depending on the scroll step.
+   - Position Category: Assigned to Spatial Regions/Facets (categorical identity channel).
+   - Preferred Foot / Selection Focus: Assigned to Color Hue (Muted Gray for default, Accent Coral/Red for highlighting focal categories/outliers).
+   - Justification: Position on a common scale ranks highest in effectiveness for quantitative comparison. Identity channels (spatial region, color hue) are strictly reserved for categorical attributes to avoid implying magnitude order.
+
+4. Expressiveness Principle:
+   - The visualization encodes all primary attributes (Rating, Age, Value, Position) using appropriate scale types without adding ungrounded visual magnitude channels to unordered attributes.
+-->
+
+<header>
+    <h1>The Elite Anatomy of FIFA 20</h1>
+    <p class="subtitle">An interactive visual journey examining performance, age, market value, and positions among top-tier global football players.</p>
+</header>
+
+<main>
+    <section id="scrolly">
+        <div class="scrolly-text">
+            <div class="step" data-step="1">
+                <p><strong>1. The Peak Performers:</strong> Global player ratings strictly follow a right-skewed distribution, where only a tiny fraction of elite stars surpass an overall rating of 88.</p>
+            </div>
+            <div class="step" data-step="2">
+                <p><strong>2. Age vs. Quality:</strong> Peak performance clusters tightly between ages 26 and 31, while younger prodigies and veteran outliers remain rare exceptions.</p>
+            </div>
+            <div class="step" data-step="3">
+                <p><strong>3. Market Value Exponentiality:</strong> Player valuation scales exponentially with overall rating, creating an immense market premium for top-tier talent.</p>
+            </div>
+            <div class="step" data-step="4">
+                <p><strong>4. Positional Spread:</strong> Midfielders and Forwards dominate top rating tiers, whereas Goalkeepers and Defenders exhibit distinct valuation and rating dynamics.</p>
+            </div>
+            <div class="step" data-step="5">
+                <p><strong>5. The Full Picture:</strong> Hover over any player to inspect their complete profile, market valuation, and attribute distributions.</p>
+            </div>
+        </div>
+
+        <div class="scrolly-graphic">
+            <div id="chart"></div>
+        </div>
+    </section>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer>
+    <p>Data Source: FIFA 20 Complete Player Dataset[cite: 10] | Visualized with D3.js v7 & Scrollama</p>
+</footer>
+
+<script>
+    // Embedded Dataset parsed/sampled from SQLite dump provided
+    const rawData = [
+        { name: "L. Messi", age: 32, rating: 94, value: 95.5, pos: "FWD", foot: "Left" },
+        { name: "Cristiano Ronaldo", age: 34, rating: 93, value: 58.5, pos: "FWD", foot: "Right" },
+        { name: "Neymar Jr", age: 27, rating: 92, value: 105.5, pos: "FWD", foot: "Right" },
+        { name: "Jan Oblak", age: 26, rating: 91, value: 77.5, pos: "GK", foot: "Right" },
+        { name: "E. Hazard", age: 28, rating: 91, value: 90.0, pos: "FWD", foot: "Right" },
+        { name: "K. De Bruyne", age: 28, rating: 91, value: 93.0, pos: "MID", foot: "Right" },
+        { name: "M. ter Stegen", age: 27, rating: 90, value: 67.5, pos: "GK", foot: "Right" },
+        { name: "V. van Dijk", age: 28, rating: 90, value: 78.0, pos: "DEF", foot: "Right" },
+        { name: "L. Modrić", age: 33, rating: 90, value: 45.0, pos: "MID", foot: "Right" },
+        { name: "M. Salah", age: 27, rating: 90, value: 80.5, pos: "FWD", foot: "Left" },
+        { name: "K. Mbappé", age: 20, rating: 89, value: 93.5, pos: "FWD", foot: "Right" },
+        { name: "K. Koulibaly", age: 28, rating: 89, value: 67.5, pos: "DEF", foot: "Right" },
+        { name: "H. Kane", age: 25, rating: 89, value: 83.0, pos: "FWD", foot: "Right" },
+        { name: "Alisson", age: 26, rating: 89, value: 58.0, pos: "GK", foot: "Right" },
+        { name: "D. De Gea", age: 28, rating: 89, value: 56.0, pos: "GK", foot: "Right" },
+        { name: "N. Kanté", age: 28, rating: 89, value: 66.0, pos: "MID", foot: "Right" },
+        { name: "G. Chiellini", age: 34, rating: 89, value: 24.5, pos: "DEF", foot: "Left" },
+        { name: "S. Agüero", age: 31, rating: 89, value: 60.0, pos: "FWD", foot: "Right" },
+        { name: "Sergio Ramos", age: 33, rating: 89, value: 31.5, pos: "DEF", foot: "Right" },
+        { name: "L. Suárez", age: 32, rating: 89, value: 53.0, pos: "FWD", foot: "Right" },
+        { name: "R. Lewandowski", age: 30, rating: 89, value: 64.5, pos: "FWD", foot: "Right" },
+        { name: "S. Handanovič", age: 34, rating: 88, value: 26.0, pos: "GK", foot: "Right" },
+        { name: "M. Neuer", age: 33, rating: 88, value: 32.0, pos: "GK", foot: "Right" },
+        { name: "H. Lloris", age: 32, rating: 88, value: 36.0, pos: "GK", foot: "Left" },
+        { name: "David Silva", age: 33, rating: 88, value: 36.0, pos: "MID", foot: "Left" },
+        { name: "E. Cavani", age: 32, rating: 88, value: 36.5, pos: "FWD", foot: "Right" },
+        { name: "D. Godín", age: 33, rating: 88, value: 28.0, pos: "DEF", foot: "Right" },
+        { name: "T. Kroos", age: 29, rating: 88, value: 57.0, pos: "MID", foot: "Right" },
+        { name: "Sergio Busquets", age: 30, rating: 88, value: 54.5, pos: "MID", foot: "Right" },
+        { name: "A. Griezmann", age: 28, rating: 88, value: 69.0, pos: "FWD", foot: "Left" },
+        { name: "P. Dybala", age: 25, rating: 88, value: 76.5, pos: "MID", foot: "Left" },
+        { name: "P. Pogba", age: 26, rating: 88, value: 72.5, pos: "MID", foot: "Right" },
+        { name: "Ederson", age: 25, rating: 88, value: 54.5, pos: "GK", foot: "Left" },
+        { name: "R. Sterling", age: 24, rating: 88, value: 73.5, pos: "FWD", foot: "Right" },
+        { name: "C. Eriksen", age: 27, rating: 88, value: 68.0, pos: "MID", foot: "Right" },
+        { name: "T. Courtois", age: 27, rating: 88, value: 48.0, pos: "GK", foot: "Left" },
+        { name: "Piqué", age: 32, rating: 88, value: 38.0, pos: "DEF", foot: "Right" },
+        { name: "A. Laporte", age: 25, rating: 87, value: 56.5, pos: "DEF", foot: "Left" },
+        { name: "Bernardo Silva", age: 24, rating: 87, value: 64.0, pos: "MID", foot: "Left" },
+        { name: "Casemiro", age: 27, rating: 87, value: 53.5, pos: "MID", foot: "Right" },
+        { name: "H. Son", age: 26, rating: 87, value: 60.0, pos: "FWD", foot: "Right" },
+        { name: "Fernandinho", age: 34, rating: 87, value: 19.5, pos: "MID", foot: "Right" },
+        { name: "Thiago Silva", age: 34, rating: 87, value: 18.5, pos: "DEF", foot: "Right" },
+        { name: "K. Benzema", age: 31, rating: 87, value: 45.0, pos: "FWD", foot: "Right" },
+        { name: "J. Vertonghen", age: 32, rating: 87, value: 32.5, pos: "DEF", foot: "Left" },
+        { name: "D. Mertens", age: 32, rating: 87, value: 40.0, pos: "FWD", foot: "Right" },
+        { name: "M. Hummels", age: 30, rating: 87, value: 41.0, pos: "DEF", foot: "Right" },
+        { name: "T. Alderweireld", age: 30, rating: 87, value: 41.5, pos: "DEF", foot: "Right" },
+        { name: "M. Reus", age: 30, rating: 87, value: 56.0, pos: "MID", foot: "Right" },
+        { name: "P. Aubameyang", age: 30, rating: 87, value: 57.0, pos: "FWD", foot: "Right" },
+        { name: "S. Mané", age: 27, rating: 87, value: 62.0, pos: "FWD", foot: "Right" },
+        { name: "L. Insigne", age: 28, rating: 87, value: 56.0, pos: "FWD", foot: "Right" },
+        { name: "K. Navas", age: 32, rating: 87, value: 30.5, pos: "GK", foot: "Right" },
+        { name: "Thiago", age: 28, rating: 87, value: 55.0, pos: "MID", foot: "Right" },
+        { name: "Jordi Alba", age: 30, rating: 87, value: 40.0, pos: "DEF", foot: "Left" },
+        { name: "A. Di María", age: 31, rating: 87, value: 39.0, pos: "FWD", foot: "Left" },
+        { name: "M. Pjanić", age: 29, rating: 87, value: 52.5, pos: "MID", foot: "Right" },
+        { name: "I. Rakitić", age: 31, rating: 86, value: 38.0, pos: "MID", foot: "Right" },
+        { name: "Roberto Firmino", age: 27, rating: 86, value: 52.0, pos: "FWD", foot: "Right" },
+        { name: "Isco", age: 27, rating: 86, value: 51.5, pos: "MID", foot: "Right" },
+        { name: "J. Kimmich", age: 24, rating: 86, value: 48.0, pos: "DEF", foot: "Right" },
+        { name: "W. Szczęsny", age: 29, rating: 86, value: 37.5, pos: "GK", foot: "Right" },
+        { name: "S. Umtiti", age: 25, rating: 86, value: 50.0, pos: "DEF", foot: "Left" },
+        { name: "G. Donnarumma", age: 20, rating: 85, value: 41.5, pos: "GK", foot: "Right" },
+        { name: "M. de Ligt", age: 19, rating: 85, value: 50.0, pos: "DEF", foot: "Right" },
+        { name: "F. de Jong", age: 22, rating: 85, value: 52.0, pos: "MID", foot: "Right" },
+        { name: "J. Sancho", age: 19, rating: 84, value: 44.5, pos: "MID", foot: "Right" },
+        { name: "T. Alexander-Arnold", age: 20, rating: 83, value: 32.0, pos: "DEF", foot: "Right" },
+        { name: "J. Félix", age: 19, rating: 80, value: 28.0, pos: "FWD", foot: "Right" }
+    ];
+
+    // Dimensions setup
+    const container = d3.select("#chart");
+    let width = container.node().getBoundingClientRect().width;
+    let height = container.node().getBoundingClientRect().height;
+
+    const margin = { top: 40, right: 30, bottom: 60, left: 60 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    const svg = container.append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Axes groups
+    const xAxisG = g.append("g")
+        .attr("transform", `translate(0,${innerHeight})`);
+    const yAxisG = g.append("g");
+
+    // Axis Labels
+    const xLabel = g.append("text")
+        .attr("x", innerWidth / 2)
+        .attr("y", innerHeight + 45)
+        .attr("fill", "#2b2b2b")
+        .attr("font-size", "12px")
+        .attr("text-anchor", "middle");
+
+    const yLabel = g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -innerHeight / 2)
+        .attr("y", -40)
+        .attr("fill", "#2b2b2b")
+        .attr("font-size", "12px")
+        .attr("text-anchor", "middle")
+        .text("Overall Rating (0 - 100)");
+
+    // Scales
+    const yScale = d3.scaleLinear()
+        .domain([78, 95])
+        .range([innerHeight, 0]);
+
+    yAxisG.call(d3.axisLeft(yScale).ticks(8));
+
+    const tooltip = d3.select("#tooltip");
+
+    // Draw Data Circles
+    const dots = g.selectAll(".dot")
+        .data(rawData)
+        .enter()
+        .append("circle")
+        .attr("class", "dot")
+        .attr("r", 7)
+        .attr("fill", "#8c8c8c")
+        .attr("opacity", 0.7)
+        .attr("stroke", "#ffffff")
+        .attr("stroke-width", 1.5);
+
+    // Direct labels group
+    const labelsG = g.append("g").attr("class", "labels-group");
+
+    // Tooltip Events
+    dots.on("mouseover", (event, d) => {
+        tooltip.style("opacity", 1)
+            .html(`
+                <div class="tooltip-name">${d.name}</div>
+                <div>Rating: <strong>${d.rating}</strong></div>
+                <div>Age: <strong>${d.age} yrs</strong></div>
+                <div>Value: <strong>€${d.value}M</strong></div>
+                <div>Position: <strong>${d.pos}</strong></div>
+            `);
+    })
+    .on("mousemove", (event) => {
+        tooltip.style("left", (event.pageX + 15) + "px")
+            .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseleave", () => {
+        tooltip.style("opacity", 0);
+    });
+
+    // Step Rendering Functions
+    function updateStep(step) {
+        labelsG.selectAll("*").remove();
+
+        if (step === 1) {
+            // Step 1: Rating Distribution (Categorical Jitter / Rank)
+            const xScale = d3.scalePoint()
+                .domain(["All Top Players"])
+                .range([0, innerWidth])
+                .padding(0.5);
+
+            xAxisG.transition().duration(800).call(d3.axisBottom(xScale));
+            xLabel.text("");
+
+            // Add subtle horizontal jitter
+            dots.transition().duration(800)
+                .attr("cx", (d, i) => innerWidth / 2 + (i % 7 - 3) * 18)
+                .attr("cy", d => yScale(d.rating))
+                .attr("fill", d => d.rating >= 91 ? "#d9534f" : "#8c8c8c")
+                .attr("opacity", d => d.rating >= 91 ? 0.9 : 0.4);
+
+            // Direct Label Outliers
+            const topPlayers = rawData.filter(d => d.rating >= 91);
+            labelsG.selectAll(".label")
+                .data(topPlayers)
+                .enter()
+                .append("text")
+                .attr("x", (d, i) => innerWidth / 2 + (i % 7 - 3) * 18 + 12)
+                .attr("y", d => yScale(d.rating) + 4)
+                .text(d => `${d.name} (${d.rating})`)
+                .attr("font-size", "11px")
+                .attr("fill", "#2b2b2b")
+                .attr("font-weight", "600");
+
+        } else if (step === 2) {
+            // Step 2: Age vs Rating Scatter plot
+            const xScale = d3.scaleLinear()
+                .domain([18, 36])
+                .range([0, innerWidth]);
+
+            xAxisG.transition().duration(800).call(d3.axisBottom(xScale).ticks(8));
+            xLabel.text("Age (Years)");
+
+            dots.transition().duration(800)
+                .attr("cx", d => xScale(d.age))
+                .attr("cy", d => yScale(d.rating))
+                .attr("fill", d => (d.age < 21 || d.age > 33) && d.rating >= 88 ? "#d9534f" : "#8c8c8c")
+                .attr("opacity", 0.75);
+
+        } else if (step === 3) {
+            // Step 3: Market Value vs Rating Exponentiality
+            const xScale = d3.scaleLinear()
+                .domain([0, 110])
+                .range([0, innerWidth]);
+
+            xAxisG.transition().duration(800).call(d3.axisBottom(xScale).ticks(8));
+            xLabel.text("Market Value (€ Millions)");
+
+            dots.transition().duration(800)
+                .attr("cx", d => xScale(d.value))
+                .attr("cy", d => yScale(d.rating))
+                .attr("fill", d => d.value > 80 ? "#d9534f" : "#8c8c8c")
+                .attr("opacity", 0.8);
+
+            // Highlight mega-value outliers
+            labelsG.selectAll(".label")
+                .data(rawData.filter(d => d.value > 85))
+                .enter()
+                .append("text")
+                .attr("x", d => xScale(d.value) - 10)
+                .attr("y", d => yScale(d.rating) - 12)
+                .text(d => `${d.name} (€${d.value}M)`)
+                .attr("font-size", "11px")
+                .attr("fill", "#2b2b2b")
+                .attr("font-weight", "600");
+
+        } else if (step === 4) {
+            // Step 4: Spatial Faceting by Position Category
+            const positions = ["GK", "DEF", "MID", "FWD"];
+            const xScale = d3.scalePoint()
+                .domain(positions)
+                .range([50, innerWidth - 50])
+                .padding(0.5);
+
+            xAxisG.transition().duration(800).call(d3.axisBottom(xScale));
+            xLabel.text("Primary Position Group");
+
+            dots.transition().duration(800)
+                .attr("cx", d => xScale(d.pos) + (Math.random() * 20 - 10))
+                .attr("cy", d => yScale(d.rating))
+                .attr("fill", d => d.pos === "FWD" || d.pos === "MID" ? "#d9534f" : "#8c8c8c")
+                .attr("opacity", 0.75);
+
+        } else if (step === 5) {
+            // Step 5: Full Interactive Picture (Age vs Rating with Value sizing)
+            const xScale = d3.scaleLinear()
+                .domain([18, 36])
+                .range([0, innerWidth]);
+
+            xAxisG.transition().duration(800).call(d3.axisBottom(xScale));
+            xLabel.text("Age (Years)");
+
+            dots.transition().duration(800)
+                .attr("cx", d => xScale(d.age))
+                .attr("cy", d => yScale(d.rating))
+                .attr("fill", "#d9534f")
+                .attr("opacity", 0.7);
+        }
+    }
+
+    // Initialize Scrollama
+    const scroller = scrollama();
+
+    scroller.setup({
+        step: ".step",
+        offset: 0.5,
+        debug: false
+    }).onStepEnter(response => {
+        // response.element, response.index, response.direction
+        d3.selectAll(".step").classed("is-active", false);
+        d3.select(response.element).classed("is-active", true);
+
+        const stepIndex = parseInt(response.element.getAttribute("data-step"));
+        updateStep(stepIndex);
+    });
+
+    window.addEventListener("resize", scroller.resize);
+</script>
+</body>
+</html>

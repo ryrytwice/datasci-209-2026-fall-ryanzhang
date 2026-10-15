@@ -28,6 +28,10 @@ def getData(year):
     # show the post with the given id, the id is an integer
     return filteredRevenue.to_json(orient='records')
 
+@app.route("/ai_players")
+def ai():
+    return render_template("players20_ai.html")
+
 @app.route("/api")
 def api():
     return {'x':2} 
