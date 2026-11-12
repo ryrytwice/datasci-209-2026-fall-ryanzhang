@@ -51,5 +51,9 @@ def get_nationality():
     res = cur.execute(f"select nationality from players where short_name = '{player}'")
     return {'nationality': res.fetchone()[0]}
 
+@app.route("/knicks")
+def lineups_html():
+    return render_template("knicks_lineup_fit_altair_spacing.html")
+
 if __name__ == '__main__':
     app.run()
